@@ -39,9 +39,11 @@ class PermissionService
             return false;
         }
 
+        // strict: true enforces type-safe comparison — without it, 0 == "read" evaluates to true in PHP
         return in_array(
             $permission,
-            $token['permissions']
+            $token['permissions'],
+            strict: true
         );
     }
 
