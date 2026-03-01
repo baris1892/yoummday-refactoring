@@ -4,7 +4,8 @@ declare(strict_types=1);
 
 namespace App\Handler;
 
-use App\Provider\TokenDataProvider;
+use App\Service\PermissionService;
+use Fig\Http\Message\StatusCodeInterface;
 use ProgPhil1337\SimpleReactApp\HTTP\Response\JSONResponse;
 use ProgPhil1337\SimpleReactApp\HTTP\Response\ResponseInterface;
 use ProgPhil1337\SimpleReactApp\HTTP\Routing\Attribute\Route;
@@ -16,45 +17,46 @@ use Psr\Http\Message\ServerRequestInterface;
 #[Route(httpMethod: HttpMethod::GET, uri: '/has_permission/{token}')]
 class PermissionHandler implements HandlerInterface
 {
-    /**
-     * Dependency Injection would be available here
-     */
-    public function __construct()
+    public function __construct(
+        // use dependency injection
+        private readonly PermissionService $permissionService,
+    )
     {
-
     }
 
     public function __invoke(ServerRequestInterface $serverRequest, RouteParameters $parameters): ResponseInterface
     {
-        $np = "read";
-
-        $tId = $parameters->get("token", "kein_token");
-
-        if ($tId != "kein_token") {
-            $dataProvider = new TokenDataProvider();
-
-            $tokens = $dataProvider->getTokens();
-            $token = null;
-
-            foreach ($tokens as $t) {
-                if ($t["token"] == $tId) {
-                    $token = $t;
-                }
-            }
-
-            foreach ($token["permissions"] as $p) {
-                if ($p == $np) {
-                    $a = $a + 1;
-                }
-            }
-
-            if ($a > 0) {
-                return new JSONResponse(array("permission" => true), 400);
-            } else {
-                return new JSONResponse(array('permission' => false), 400);
-            }
-        } else {
-            return new JSONResponse(array("permission" => false), 400);
+        $tokenValue = $parameters->get('token');
+        if ($tokenValue === null) {
+            // status code 400: the route parameter is missing entirely - this is a malformed request,
+            // not a permission check that returned false.
+            return $this->permissionResponse(
+                false, StatusCodeInterface::STATUS_BAD_REQUEST
+            );
         }
+
+        // HTTP 200 for both options true and false: this endpoint is a query ("does this token have permission?"),
+        // not an access gate. The HTTP status reflects the success of the request itself, not the permission outcome.
+        // If this endpoint were used as an authorization guard, 403 for false and 404 for unknown tokens would be
+        // appropriate instead.
+        // Note: Exceptions are expected to be handled by the global ExceptionHandler middleware.
+        return $this->permissionResponse(
+            $this->permissionService->hasRequiredPermission($tokenValue)
+        );
+    }
+
+    /**
+     * Single place to construct the permission response — DRY, and easy to change
+     * the shape (e.g. add a "reason" field) without touching the main flow.
+     */
+    private function permissionResponse(
+        bool $hasPermission,
+        int  $statusCode = StatusCodeInterface::STATUS_OK
+    ): JSONResponse
+    {
+        return new JSONResponse(
+            ['permission' => $hasPermission],
+            $statusCode
+        );
     }
 }
