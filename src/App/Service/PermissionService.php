@@ -4,59 +4,30 @@ declare(strict_types=1);
 
 namespace App\Service;
 
-use App\Provider\TokenDataProvider;
+use App\Domain\Validator\PermissionValidator;
+use App\Repository\TokenRepository;
 
-/**
- * Domain service responsible for token permission resolution.
- *
- * Extracted from PermissionHandler to respect SRP: the handler's job is HTTP
- * translation, this class owns the business rule "does token X have permission Y?".
- * Keeping business logic here makes it reusable and unit-testable without any HTTP stack.
- */
 class PermissionService
 {
-    /** Named constant instead of a magic string */
-    private const PERMISSION_READ = 'read';
+    private const DEFAULT_PERMISSION = 'read';
 
-    /**
-     * Note: In a real-world scenario, I would prefer injecting a TokenProviderInterface.
-     * However, as per the task instructions to not modify the TokenDataProvider file,
-     * I am injecting the concrete class here.
-     */
     public function __construct(
-        private readonly TokenDataProvider $tokenDataProvider,
+        private readonly TokenRepository     $tokenRepository,
+        private readonly PermissionValidator $permissionValidator
     )
     {
     }
 
-    public function hasRequiredPermission(
+    public function isTokenAuthorized(
         string $tokenValue,
-        string $permission = self::PERMISSION_READ
+        string $permission = self::DEFAULT_PERMISSION
     ): bool
     {
-        $token = $this->findToken($tokenValue);
+        $token = $this->tokenRepository->findByValue($tokenValue);
         if ($token === null) {
             return false;
         }
 
-        // strict: true enforces type-safe comparison — without it, 0 == "read" evaluates to true in PHP
-        return in_array(
-            $permission,
-            $token['permissions'],
-            strict: true
-        );
-    }
-
-    private function findToken(string $tokenValue): ?array
-    {
-        $tokens = $this->tokenDataProvider->getTokens();
-        foreach ($tokens as $token) {
-            // Ensure array structure is as expected before access
-            if (isset($token['token']) && $token['token'] === $tokenValue) {
-                return $token;
-            }
-        }
-
-        return null;
+        return $this->permissionValidator->hasPermission($token, $permission);
     }
 }

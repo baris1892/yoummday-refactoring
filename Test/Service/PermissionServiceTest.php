@@ -4,49 +4,33 @@ declare(strict_types=1);
 
 namespace Test\Service;
 
-use App\Provider\TokenDataProvider;
+use App\Domain\Model\Token;
+use App\Domain\Validator\PermissionValidator;
+use App\Repository\TokenRepository;
 use App\Service\PermissionService;
 use PHPUnit\Framework\TestCase;
 
 class PermissionServiceTest extends TestCase
 {
-    public function testHasRequiredPermissionReturnsTrueOnMatch(): void
+    public function testIsTokenAuthorizedReturnsFalseWhenTokenNotFound(): void
     {
-        $mockProvider = $this->createMock(TokenDataProvider::class);
-        $mockProvider->method('getTokens')->willReturn([
-            ['token' => 'test-token', 'permissions' => ['read', 'write']]
-        ]);
+        $repo = $this->createMock(TokenRepository::class);
+        $repo->method('findByValue')->willReturn(null);
 
-        $service = new PermissionService($mockProvider);
+        $service = new PermissionService($repo, new PermissionValidator());
 
-        $this->assertTrue(
-            $service->hasRequiredPermission('test-token', 'read')
-        );
+        $this->assertFalse($service->isTokenAuthorized('invalid'));
     }
 
-    public function testHasRequiredPermissionReturnsFalseOnMissingPermission(): void
+    public function testIsTokenAuthorizedDelegatesToValidator(): void
     {
-        $mockProvider = $this->createMock(TokenDataProvider::class);
-        $mockProvider->method('getTokens')->willReturn([
-            ['token' => 'readonly-token', 'permissions' => ['read']]
-        ]);
+        $token = new Token('valid', ['read']);
+        $repo = $this->createMock(TokenRepository::class);
+        $repo->method('findByValue')->with('valid')->willReturn($token);
 
-        $service = new PermissionService($mockProvider);
+        $service = new PermissionService($repo, new PermissionValidator());
 
-        $this->assertFalse(
-            $service->hasRequiredPermission('readonly-token', 'write')
-        );
-    }
-
-    public function testHasRequiredPermissionReturnsFalseOnUnknownToken(): void
-    {
-        $mockProvider = $this->createMock(TokenDataProvider::class);
-        $mockProvider->method('getTokens')->willReturn([]);
-
-        $service = new PermissionService($mockProvider);
-
-        $this->assertFalse(
-            $service->hasRequiredPermission('non-existent')
-        );
+        $this->assertTrue($service->isTokenAuthorized('valid', 'read'));
+        $this->assertFalse($service->isTokenAuthorized('valid', 'write'));
     }
 }

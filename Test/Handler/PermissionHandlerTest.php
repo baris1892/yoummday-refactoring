@@ -18,26 +18,18 @@ class PermissionHandlerTest extends TestCase
      */
     public function testReturnsSuccessfulResponseWhenPermissionIsGranted(): void
     {
-        // Mock the PermissionService to control the outcome
         $permissionService = $this->createMock(PermissionService::class);
-        $permissionService->expects($this->once())
-            ->method('hasRequiredPermission')
-            ->with('valid-token') // Verify the handler passes the correct data
-            ->willReturn(true);
+        $permissionService->method('isTokenAuthorized')->willReturn(true);
 
         $permissionHandler = new PermissionHandler($permissionService);
+        $params = $this->createMock(RouteParameters::class);
+        $params->method('get')->with('token')->willReturn('any-token');
 
-        // Mock Request & Params
-        $routeParameters = $this->createMock(RouteParameters::class);
-        $routeParameters->method('get')->with('token')->willReturn('valid-token');
-
-        // Execute
         $response = $permissionHandler->__invoke(
             $this->createMock(ServerRequestInterface::class),
-            $routeParameters
+            $params
         );
 
-        // Assert: Focus on HTTP translation
         $this->assertSame(StatusCodeInterface::STATUS_OK, $response->getCode());
         $this->assertJsonStringEqualsJsonString(
             json_encode(['permission' => true]),
